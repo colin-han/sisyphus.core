@@ -1,6 +1,9 @@
 package info.colinhan.sisyphus.context;
 
-public interface VariableTypeValidationContext {
+import info.colinhan.sisyphus.model.ReferenceType;
+import info.colinhan.sisyphus.model.VariableType;
+
+public interface VariableValidationContext {
 
     /**
      * Check if a user exists.
@@ -8,4 +11,5 @@ public interface VariableTypeValidationContext {
      * @return True if the user exists, false otherwise.
      */
     boolean hasUser(String username);
+    VariableType getVariableType(ReferenceType type, String name);
 }
