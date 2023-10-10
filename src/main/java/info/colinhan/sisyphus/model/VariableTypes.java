@@ -3,13 +3,14 @@ package info.colinhan.sisyphus.model;
 import info.colinhan.sisyphus.context.VariableValidationContext;
 
 import java.util.*;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 public final class VariableTypes {
     private VariableTypes() {
     }
 
-    private static Map<String, VariableType> registeredTypes = new HashMap<>();
+    private static final Map<String, VariableType> registeredTypes = new HashMap<>();
 
     public static void registerType(VariableType type) {
         String name = type.getName().toUpperCase();
@@ -37,9 +38,15 @@ public final class VariableTypes {
         private final List<Class<?>> acceptableValueTypes = new ArrayList<>();
         private final List<VariableType> acceptableVariableTypes = new ArrayList<>();
         private final List<String> acceptableVariableTypeNames = new ArrayList<>();
+        private final BiFunction<VariableValidationContext, Object, java.util.Optional<Boolean>> validator;
 
         public SimpleType(String name, Object... acceptableArray) {
+            this(name, null, acceptableArray);
+        }
+
+        public SimpleType(String name, BiFunction<VariableValidationContext, Object, java.util.Optional<Boolean>> validator, Object... acceptableArray) {
             super(name);
+            this.validator = validator;
             for (Object acceptable : acceptableArray) {
                 if (acceptable instanceof VariableType variableType) {
                     acceptableVariableTypes.add(variableType);
@@ -61,6 +68,18 @@ public final class VariableTypes {
             if (value == this) {
                 return null;
             }
+
+            if (this.validator != null) {
+                Optional<Boolean> result = this.validator.apply(context, value);
+                if (result.isPresent()) {
+                    if (!result.get()) {
+                        return buildError(value);
+                    } else {
+                        return null;
+                    }
+                }
+            }
+
             if (value instanceof VariableType variableType) {
                 if (acceptableVariableTypes.contains(variableType)) {
                     return null;
@@ -73,20 +92,27 @@ public final class VariableTypes {
                     acceptableVariableTypeNames.remove(name);
                     acceptableVariableTypes.add(variableType);
                     return null;
-                } else {
-                    return "Expected a %s, but got a %s variable !".formatted(this.getName(), variableType.getName());
+                }
+            } else {
+                for (VariableType assignableFrom : acceptableVariableTypes) {
+                    String error = assignableFrom.validate(context, value);
+                    if (error == null) {
+                        return null;
+                    }
+                }
+                for (Class<?> assignableFrom : acceptableValueTypes) {
+                    if (assignableFrom.isInstance(value)) {
+                        return null;
+                    }
                 }
             }
-            for (VariableType assignableFrom : acceptableVariableTypes) {
-                String error = assignableFrom.validate(context, value);
-                if (error == null) {
-                    return null;
-                }
-            }
-            for (Class<?> assignableFrom : acceptableValueTypes) {
-                if (assignableFrom.isInstance(value)) {
-                    return null;
-                }
+
+            return buildError(value);
+        }
+
+        private String buildError(Object value) {
+            if (value instanceof VariableType variableType) {
+                return "Expected a %s, but got a %s variable !".formatted(this.getName(), variableType.getName());
             }
             return "Expected a %s, but got a %s(%s) !".formatted(this.getName(), value.getClass().getSimpleName(), value);
         }
@@ -102,6 +128,7 @@ public final class VariableTypes {
             return null;
         }
     }
+
     public static final VariableType UNKNOWN = new UnknownType();
 
     private static class AnyType extends AbstractType {
@@ -114,13 +141,17 @@ public final class VariableTypes {
             return null;
         }
     }
+
     public static final VariableType ANY = new AnyType();
 
     private static class StringType extends SimpleType {
         public StringType() {
-            super("STRING", String.class);
+            super("STRING",
+                    (context, value) -> value instanceof EnumType ? Optional.of(true) : Optional.empty(),
+                    String.class);
         }
     }
+
     public static final VariableType STRING = new StringType();
 
     private static class NumberType extends SimpleType {
@@ -128,6 +159,7 @@ public final class VariableTypes {
             super("NUMBER", Number.class);
         }
     }
+
     public static final VariableType NUMBER = new NumberType();
 
     private static class BooleanType extends SimpleType {
@@ -135,6 +167,7 @@ public final class VariableTypes {
             super("BOOLEAN", Boolean.class);
         }
     }
+
     public static final VariableType BOOLEAN = new BooleanType();
 
     private static class UserType extends AbstractType {
@@ -160,6 +193,7 @@ public final class VariableTypes {
             }
         }
     }
+
     public static final VariableType USER = new UserType();
 
     private static class EnumType extends AbstractType {
@@ -178,6 +212,13 @@ public final class VariableTypes {
             if (value == this) {
                 return null;
             }
+            if (value instanceof EnumType enumType) {
+                if (this.items.containsAll(enumType.items)) {
+                    return null;
+                } else {
+                    return "Expected one of %s, but got a %s variable !".formatted(String.join(", ", items), enumType.getName());
+                }
+            }
             if (value instanceof String str) {
                 String v = str.toUpperCase();
                 if (items.contains(v)) {
@@ -189,6 +230,7 @@ public final class VariableTypes {
             }
         }
     }
+
     public static VariableType ENUM(String... items) {
         List<String> itemList = Arrays.stream(items)
                 .map(String::toUpperCase)
@@ -210,6 +252,7 @@ public final class VariableTypes {
             super(name);
             this.itemType = itemType;
         }
+
         @Override
         public String validate(VariableValidationContext context, Object value) {
             if (value == null) {
@@ -231,6 +274,7 @@ public final class VariableTypes {
             }
         }
     }
+
     public static VariableType ARRAY(VariableType itemType) {
         String name = "ARRAY(%s)".formatted(itemType.getName());
 
@@ -260,6 +304,7 @@ public final class VariableTypes {
             return type.validate(context, value);
         }
     }
+
     public static VariableType OPTIONAL(VariableType type) {
         if (type instanceof OptionalType) {
             return type;
