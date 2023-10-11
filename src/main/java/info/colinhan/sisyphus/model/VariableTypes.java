@@ -2,6 +2,7 @@ package info.colinhan.sisyphus.model;
 
 import info.colinhan.sisyphus.context.VariableValidationContext;
 
+import java.lang.reflect.Array;
 import java.util.*;
 import java.util.function.BiFunction;
 import java.util.stream.Collectors;
@@ -92,6 +93,15 @@ public final class VariableTypes {
                     acceptableVariableTypeNames.remove(name);
                     acceptableVariableTypes.add(variableType);
                     return null;
+                }
+            } else if (value instanceof Class<?> clazz) {
+                for (Class<?> assignableFrom : acceptableValueTypes) {
+                    if (assignableFrom == clazz) {
+                        return null;
+                    }
+                    if (assignableFrom.isAssignableFrom(clazz)) {
+                        return null;
+                    }
                 }
             } else {
                 for (VariableType assignableFrom : acceptableVariableTypes) {
@@ -234,6 +244,7 @@ public final class VariableTypes {
     public static VariableType ENUM(String... items) {
         List<String> itemList = Arrays.stream(items)
                 .map(String::toUpperCase)
+                .distinct()
                 .sorted()
                 .collect(Collectors.toList());
         String name = "ENUM(" + String.join(", ", itemList) + ")";
@@ -261,9 +272,24 @@ public final class VariableTypes {
             if (value == this) {
                 return null;
             }
-            if (value instanceof Iterable) {
-                for (Object item : (Iterable<?>) value) {
+            if (value instanceof Iterable<?> it) {
+                for (Object item : it) {
                     String error = itemType.validate(context, item);
+                    if (error != null) {
+                        return error;
+                    }
+                }
+                return null;
+            } else if (value.getClass().isArray()) {
+                int length = Array.getLength(value);
+                String error = itemType.validate(context, value.getClass().getComponentType());
+                if (error != null) {
+                    return error;
+                }
+
+                for (int i = 0; i < length; i++) {
+                    Object item = Array.get(value, i);
+                    error = itemType.validate(context, item);
                     if (error != null) {
                         return error;
                     }
