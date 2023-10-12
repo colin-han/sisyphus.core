@@ -81,4 +81,12 @@ class VariableTypesTest {
         assertAssignableFrom(OPTIONAL(STRING), ENUM("a"));
         assertAssignableFrom(OPTIONAL(ENUM("a", "b")), ENUM("a"));
     }
+
+    @Test
+    void test_getElementType() {
+        assertEquals(STRING, getElementType(ARRAY(STRING)));
+        assertEquals(UNKNOWN, getElementType(OPTIONAL(STRING)));
+        assertEquals(UNKNOWN, getElementType(STRING));
+        assertEquals(OPTIONAL(STRING), getElementType(ARRAY(OPTIONAL(STRING))));
+    }
 }
