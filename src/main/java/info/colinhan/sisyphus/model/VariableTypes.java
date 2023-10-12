@@ -311,6 +311,17 @@ public final class VariableTypes {
         return new ArrayType(name, itemType);
     }
 
+    public static boolean isArray(VariableType type) {
+        return type instanceof ArrayType;
+    }
+
+    public static VariableType getElementType(VariableType type) {
+        if (type instanceof ArrayType arrayType) {
+            return arrayType.itemType;
+        }
+        return UNKNOWN;
+    }
+
     private static class OptionalType extends AbstractType {
         private final VariableType type;
 

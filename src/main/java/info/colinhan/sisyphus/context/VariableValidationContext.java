@@ -11,5 +11,6 @@ public interface VariableValidationContext {
      * @return True if the user exists, false otherwise.
      */
     boolean hasUser(String username);
+
     VariableType getVariableType(ReferenceType type, String name);
 }
