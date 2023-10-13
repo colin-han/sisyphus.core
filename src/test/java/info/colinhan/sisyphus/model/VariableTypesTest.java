@@ -72,6 +72,7 @@ class VariableTypesTest {
         assertAssignableFrom(ARRAY(STRING), Collections.singleton("a"));
         assertAssignableFrom(ARRAY(STRING), Collections.singletonList("a"));
         assertNotAssignableFrom(ARRAY(STRING), new Object[]{});
+
     }
 
     @Test
@@ -88,5 +89,24 @@ class VariableTypesTest {
         assertEquals(UNKNOWN, getElementType(OPTIONAL(STRING)));
         assertEquals(UNKNOWN, getElementType(STRING));
         assertEquals(OPTIONAL(STRING), getElementType(ARRAY(OPTIONAL(STRING))));
+    }
+
+    @Test
+    void array_type_with_invalid_item() {
+        assertNotAssignableFrom(ARRAY(STRING), new Object[]{1, 2, 3});
+        assertNotAssignableFrom(ARRAY(NUMBER), new Object[]{"1", "2", "3"});
+    }
+
+    @Test
+    void optional_with_invalid_value() {
+        assertNotAssignableFrom(OPTIONAL(NUMBER), "not a number");
+        assertNotAssignableFrom(OPTIONAL(ENUM("a", "b")), "not a valid enum value");
+    }
+
+    @Test
+    void getElementType_with_nested_array() {
+        assertEquals(STRING, getElementType(ARRAY(STRING)));
+        assertEquals(NUMBER, getElementType(ARRAY(NUMBER)));
+        assertEquals(ARRAY(STRING), getElementType(ARRAY(ARRAY(STRING))));
     }
 }
