@@ -1,10 +1,14 @@
 package info.colinhan.sisyphus.model;
 
 import info.colinhan.sisyphus.context.VariableValidationContext;
+import info.colinhan.sisyphus.exception.ParseError;
+import info.colinhan.sisyphus.util.ResultOrErrors;
 
 import java.lang.reflect.Array;
 import java.util.*;
 import java.util.function.BiFunction;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public final class VariableTypes {
@@ -207,9 +211,9 @@ public final class VariableTypes {
     public static final VariableType USER = new UserType();
 
     private static class EnumType extends AbstractType {
-        private final List<String> items;
+        private final Set<String> items;
 
-        public EnumType(String name, List<String> items) {
+        public EnumType(String name, Set<String> items) {
             super(name);
             this.items = items;
         }
@@ -253,7 +257,7 @@ public final class VariableTypes {
             return registeredTypes.get(name);
         }
 
-        return new EnumType(name, itemList);
+        return new EnumType(name, new HashSet<>(itemList));
     }
 
     private static class ArrayType extends AbstractType {
@@ -357,6 +361,59 @@ public final class VariableTypes {
     }
 
     public static VariableType getType(String name) {
-        return registeredTypes.get(name.toUpperCase());
+        ResultOrErrors<VariableType, ParseError> result = parseType(name, 0);
+        if (result.isSuccess()) {
+            return result.result();
+        } else {
+            throw new IllegalArgumentException("Unknown type: " + name);
+        }
+    }
+
+    static Pattern complexTypePattern = Pattern.compile("^(\\w+)\\s*\\(\\s*(.*?)\\s*\\)\\s*$");
+
+    public static ResultOrErrors<VariableType, ParseError> parseType(String type) {
+        return parseType(type, 0);
+    }
+
+    private static ResultOrErrors<VariableType, ParseError> parseType(String type, int start) {
+        String upperCaseType = type.toUpperCase();
+        if (registeredTypes.containsKey(upperCaseType)) {
+            return ResultOrErrors.of(registeredTypes.get(upperCaseType));
+        }
+
+        Matcher matcher = complexTypePattern.matcher(type);
+        if (matcher.matches()) {
+            String name = matcher.group(1);
+            String itemType = matcher.group(2);
+            int nextStart = start + matcher.start(2);
+            if (name.equals("ARRAY")) {
+                ResultOrErrors<VariableType, ParseError> inner = parseType(itemType, nextStart);
+                if (inner.isSuccess()) {
+                    return ResultOrErrors.of(ARRAY(inner.result()));
+                } else {
+                    return inner;
+                }
+            }
+            if (name.equals("OPTIONAL")) {
+                ResultOrErrors<VariableType, ParseError> inner = parseType(itemType, nextStart);
+                if (inner.isSuccess()) {
+                    return ResultOrErrors.of(OPTIONAL(inner.result()));
+                } else {
+                    return inner;
+                }
+            }
+            if (name.equals("ENUM")) {
+                String[] items = Arrays.stream(itemType.split(","))
+                        .map(String::strip)
+                        .toArray(String[]::new);
+                return ResultOrErrors.of(ENUM(items));
+            }
+            return oneError(start, "Unknown type \"" + name + "\"", matcher.end(1));
+        }
+        return oneError(start, "Unknown type \"" + type + "\"", type.length());
+    }
+
+    private static ResultOrErrors<VariableType, ParseError> oneError(int start, String message, int length) {
+        return ResultOrErrors.error(new ParseError(0, start, length, message, null));
     }
 }
